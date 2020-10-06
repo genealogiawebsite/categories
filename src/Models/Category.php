@@ -5,6 +5,7 @@ namespace LaravelEnso\Categories\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
+use Illuminate\Support\LazyCollection;
 use LaravelEnso\DynamicMethods\Traits\Abilities;
 use LaravelEnso\Helpers\Traits\AvoidsDeletionConflicts;
 use LaravelEnso\Tables\Traits\TableCache;
@@ -89,6 +90,16 @@ class Category extends Model
         unset($this->recursiveParent);
 
         return $tree;
+    }
+
+
+    public function parents(): LazyCollection
+    {
+        return LazyCollection::make(function () {
+            for ($parent = $this->parent; optional($parent)->parent_id !== null; $parent = $parent->parent) {
+                yield $parent;
+            }
+        });
     }
 
     public function flattenCurrentAndBelow(): Collection
