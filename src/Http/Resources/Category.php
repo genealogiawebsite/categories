@@ -14,7 +14,7 @@ class Category extends JsonResource
             'name' => $this->name,
             'orderIndex' => $this->order_index,
             'selected' => false,
-            'subcategories' => self::collection($this->subcategories()),
+            'items' => self::collection($this->subcategories()),
         ];
     }
 

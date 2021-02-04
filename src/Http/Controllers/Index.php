@@ -13,7 +13,7 @@ class Index extends Controller
     {
         return [
             'maxNestingLevel' => Config::get('enso.categories.maxNestingLevel'),
-            'categories' => Resource::collection(Category::tree()),
+            'items' => Resource::collection(Category::tree()),
         ];
     }
 }

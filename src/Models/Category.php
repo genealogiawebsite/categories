@@ -5,6 +5,7 @@ namespace LaravelEnso\Categories\Models;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Collection;
 use LaravelEnso\DynamicMethods\Traits\Abilities;
 use LaravelEnso\Helpers\Traits\AvoidsDeletionConflicts;
@@ -16,23 +17,23 @@ class Category extends Model
 
     protected $guarded = ['id'];
 
-    public function parent()
+    public function parent(): Relation
     {
         return $this->belongsTo(static::class, 'parent_id');
     }
 
-    public function recursiveParent()
+    public function recursiveParent(): Relation
     {
         return $this->parent()->with('recursiveParent');
     }
 
-    public function subcategories()
+    public function subcategories(): Relation
     {
         return $this->hasMany(static::class, 'parent_id')
             ->orderBy('order_index');
     }
 
-    public function recursiveSubcategories()
+    public function recursiveSubcategories(): Relation
     {
         return $this->subcategories()
             ->with('recursiveSubcategories');
@@ -45,7 +46,10 @@ class Category extends Model
 
     public function move(int $orderIndex, ?int $parentId)
     {
-        $order = $orderIndex >= $this->order_index && $this->parent_id === $parentId
+        $oldParentId = $this->parent_id;
+
+        $order = $orderIndex >= $this->order_index
+            && $oldParentId === $parentId
             ? 'asc'
             : 'desc';
 
@@ -54,15 +58,24 @@ class Category extends Model
             'order_index' => $orderIndex,
         ]);
 
+        self::reorder($this->parent_id, $order);
+
+        if ($oldParentId !== $this->parent_id) {
+            self::reorder($oldParentId);
+        }
+    }
+
+    public static function reorder(?int $parentId, string $order = 'asc')
+    {
         self::whereParentId($parentId)
             ->orderBy('order_index')
             ->orderBy('updated_at', $order)
             ->get()
-            ->each(fn ($category, $index) => $category
+            ->each(fn ($group, $index) => $group
                 ->update(['order_index' => $index + 1]));
     }
 
-    public static function tree()
+    public static function tree(): Collection
     {
         return self::topLevel()
             ->orderBy('order_index')
@@ -78,10 +91,9 @@ class Category extends Model
 
     public function parentTree(): Collection
     {
-        $tree = new Collection();
         $category = $this;
         $category->attributes['parent'] = $category->recursiveParent;
-        $tree->push($category);
+        $tree = new Collection($category);
 
         while ($category = $category->parent) {
             $tree->prepend($category);
@@ -94,18 +106,18 @@ class Category extends Model
 
     public function flattenCurrentAndBelow(): Collection
     {
-        return (new Collection([$this]))->concat(
-            $this->recursiveSubcategories->map(fn ($cat) => $cat->flattenCurrentAndBelow())
-                ->flatten()
-        );
+        return $this->recursiveSubcategories
+            ->map(fn ($cat) => $cat->flattenCurrentAndBelow())
+            ->flatten()
+            ->prepend($this);
     }
 
-    public function isParent()
+    public function isParent(): bool
     {
-        return $this->subcategories()->count() > 0;
+        return $this->subcategories()->exists();
     }
 
-    public function level()
+    public function level(): int
     {
         return $this->parent_id
             ? $this->parent->level() + 1
@@ -114,7 +126,8 @@ class Category extends Model
 
     public function depth(): int
     {
-        return $this->recursiveSubcategories->map(fn ($category) => $category->depth() + 1)
+        return $this->recursiveSubcategories
+            ->map(fn ($category) => $category->depth() + 1)
             ->max() ?? 0;
     }
 }
