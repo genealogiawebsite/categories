@@ -93,7 +93,7 @@ class Category extends Model
     {
         $category = $this;
         $category->attributes['parent'] = $category->recursiveParent;
-        $tree = new Collection($category);
+        $tree = Collection::wrap($category);
 
         while ($category = $category->parent) {
             $tree->prepend($category);
