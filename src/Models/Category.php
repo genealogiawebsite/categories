@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Support\Collection;
+use LaravelEnso\Categories\Scopes\Ordered;
 use LaravelEnso\DynamicMethods\Traits\Abilities;
 use LaravelEnso\Helpers\Traits\AvoidsDeletionConflicts;
 use LaravelEnso\Tables\Traits\TableCache;
@@ -29,8 +30,7 @@ class Category extends Model
 
     public function subcategories(): Relation
     {
-        return $this->hasMany(static::class, 'parent_id')
-            ->orderBy('order_index');
+        return $this->hasMany(static::class, 'parent_id');
     }
 
     public function recursiveSubcategories(): Relation
@@ -68,7 +68,6 @@ class Category extends Model
     public static function reorder(?int $parentId, string $order = 'asc')
     {
         self::whereParentId($parentId)
-            ->orderBy('order_index')
             ->orderBy('updated_at', $order)
             ->get()
             ->each(fn ($group, $index) => $group
@@ -78,30 +77,27 @@ class Category extends Model
     public static function tree(): Collection
     {
         return self::topLevel()
-            ->orderBy('order_index')
-            ->with(['recursiveSubcategories' => fn ($categories) => $categories
-                ->orderBy('order_index'), ])
+            ->with('recursiveSubcategories')
             ->get();
-    }
-
-    public function getParentTreeAttribute()
-    {
-        return $this->parentTree();
     }
 
     public function parentTree(): Collection
     {
         $category = $this;
-        $category->attributes['parent'] = $category->recursiveParent;
+
         $tree = Collection::wrap($category);
 
-        while ($category = $category->parent) {
+        while ($category = $category->recursiveParent) {
             $tree->prepend($category);
         }
 
-        unset($this->recursiveParent);
-
         return $tree;
+    }
+
+    public function flattenCurrentAndBelowIds(): Collection
+    {
+        return $this->flattenCurrentAndBelow()
+            ->pluck('id');
     }
 
     public function flattenCurrentAndBelow(): Collection
@@ -127,7 +123,12 @@ class Category extends Model
     public function depth(): int
     {
         return $this->recursiveSubcategories
-            ->map(fn ($category) => $category->depth() + 1)
-            ->max() ?? 0;
+                ->map(fn ($category) => $category->depth() + 1)
+                ->max() ?? 0;
+    }
+
+    protected static function booted()
+    {
+        static::addGlobalScope(new Ordered());
     }
 }
