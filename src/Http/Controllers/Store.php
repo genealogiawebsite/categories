@@ -13,6 +13,6 @@ class Store extends Controller
     {
         $category->fill($request->validated())->save();
 
-        return ['category' => new Resource($category->load('subcategories'))];
+        return ['item' => new Resource($category->load('subcategories'))];
     }
 }
